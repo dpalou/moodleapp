@@ -99,7 +99,7 @@
     "cordova-plugin-inappbrowser": "git+https://github.com/moodlemobile/cordova-plugin-inappbrowser.git#moodle-ionic5",
     "cordova-plugin-ionic-keyboard": "2.2.0",
     "cordova-plugin-ionic-webview": "5.0.0",
-    "cordova-plugin-local-notification": "git+https://github.com/moodlemobile/cordova-plugin-local-notification.git#moodle",
+    "cordova-plugin-local-notification": "git+https://github.com/moodlemobile/cordova-plugin-local-notification.git#moodle-v2",
     "cordova-plugin-media": "5.0.3",
     "cordova-plugin-media-capture": "3.0.3",
     "cordova-plugin-network-information": "2.0.2",
