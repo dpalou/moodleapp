@@ -21,6 +21,8 @@ import { CoreRedirectGuard } from '@guards/redirect';
 import { CoreLoginCronHandler } from './services/handlers/cron';
 import { CoreCronDelegate } from '@services/cron';
 import { CoreEvents } from '@singletons/events';
+import { CoreLoginLogoutPage } from './pages/logout/logout';
+import { CoreSharedModule } from '@/core/shared.module';
 
 export const CORE_LOGIN_SERVICES = [
     CoreLoginHelperProvider,
@@ -33,11 +35,16 @@ const appRoutes: Routes = [
         canActivate: [CoreRedirectGuard],
         canLoad: [CoreRedirectGuard],
     },
+    {
+        path: 'logout',
+        component: CoreLoginLogoutPage,
+    },
 ];
 
 @NgModule({
     imports: [
         AppRoutingModule.forChild(appRoutes),
+        CoreSharedModule,
     ],
     providers: [
         {
@@ -59,6 +66,9 @@ const appRoutes: Routes = [
                 });
             },
         },
+    ],
+    declarations: [
+        CoreLoginLogoutPage,
     ],
 })
 export class CoreLoginModule {}

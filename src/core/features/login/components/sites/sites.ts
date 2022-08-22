@@ -63,7 +63,10 @@ export class CoreLoginSitesComponent implements OnInit {
     async add(event: Event): Promise<void> {
         await this.close(event, true);
 
-        await CoreLoginHelper.goToAddSite(true, true);
+        await CoreNavigator.navigate('/logout', {
+            params: { addSite: true },
+            reset: true,
+        });
     }
 
     /**
@@ -106,8 +109,10 @@ export class CoreLoginSitesComponent implements OnInit {
     async login(event: Event, siteId: string): Promise<void> {
         await this.close(event, true);
 
-        // This navigation will logout and navigate to the site home.
-        await CoreNavigator.navigateToSiteHome({ preferCurrentTab: false , siteId });
+        await CoreNavigator.navigate('/logout', {
+            params: { newSiteId: siteId },
+            reset: true,
+        });
     }
 
     /**
