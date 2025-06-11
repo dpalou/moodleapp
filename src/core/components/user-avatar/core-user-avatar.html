@@ -1,23 +1,25 @@
-@if (avatarUrl) {
+@if (avatarUrl()) {
 
-    @if (linkProfile) {
-        <img class="userpicture" [url]="avatarUrl" [alt]="fullname" core-external-content (onLoad)="imageLoaded($event)"
-            (ariaButtonClick)="gotoProfile($event)" [siteId]="siteId" [hidden]="imageError">
+    @if (linkProfile()) {
+        <img class="userpicture" [url]="avatarUrl()" [alt]="computedFullname()" core-external-content (onLoad)="imageLoaded($event)"
+            (ariaButtonClick)="gotoProfile($event)" [siteId]="computedSiteId()" [hidden]="imageError()">
     } @else {
-        <img class="userpicture" [url]="avatarUrl" [alt]="'core.pictureof' | translate:{$a: fullname}" core-external-content
-            (onLoad)="imageLoaded($event)" aria-hidden="true" [siteId]="siteId" [hidden]="imageError">
+        <img class="userpicture" [url]="avatarUrl()" [alt]="'core.pictureof' | translate:{$a: computedFullname()}" core-external-content
+            (onLoad)="imageLoaded($event)" aria-hidden="true" [siteId]="computedSiteId()" [hidden]="imageError()">
     }
 
 }
-@if (!avatarUrl || imageError){
-    @if (initials) {
-        @if (linkProfile) {
-            <div class="userinitials" [attr.aria-label]="fullname" [title]="fullname" (ariaButtonClick)="gotoProfile($event)"
-                [attr.data-initials]="initials">
+@if (!avatarUrl() || imageError()){
+    @let initialsValue = initials.value();
+    @if (initialsValue) {
+        @if (linkProfile()) {
+            <div class="userinitials" [attr.aria-label]="computedFullname()" [title]="computedFullname()"
+                (ariaButtonClick)="gotoProfile($event)" [attr.data-initials]="initialsValue">
             </div>
         } @else {
-            <div class="userinitials" [attr.aria-label]="'core.pictureof' | translate:{$a: fullname}"
-                [title]="'core.pictureof' | translate:{$a: fullname}" role="img" [attr.data-initials]="initials" aria-hidden="true">
+            <div class="userinitials" [attr.aria-label]="'core.pictureof' | translate:{$a: computedFullname()}"
+                [title]="'core.pictureof' | translate:{$a: computedFullname()}" role="img" [attr.data-initials]="initialsValue"
+                aria-hidden="true">
             </div>
         }
     } @else {
@@ -26,7 +28,7 @@
     }
 }
 
-@if (checkOnline && isOnline()) {
+@if (checkOnline() && isOnline()) {
     <span class="contact-status online" role="status" [attr.aria-label]="'core.online' | translate">
     </span>
 }

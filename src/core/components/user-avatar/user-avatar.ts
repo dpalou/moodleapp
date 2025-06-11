@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Component, Input, OnInit, OnChanges, OnDestroy, SimpleChange } from '@angular/core';
+import { Component, OnInit, OnDestroy, input, computed, signal, linkedSignal, resource } from '@angular/core';
 
 import { CoreSiteBasicInfo, CoreSites } from '@services/sites';
 import { CoreUtils } from '@singletons/utils';
@@ -44,37 +44,99 @@ import { CORE_USER_PROFILE_PICTURE_UPDATED } from '@features/user/constants';
         CoreAriaButtonClickDirective,
     ],
 })
-export class CoreUserAvatarComponent implements OnInit, OnChanges, OnDestroy {
+export class CoreUserAvatarComponent implements OnInit, OnDestroy {
 
-    @Input() user?: CoreUserWithAvatar; // @todo Fix the accepted type and restrict it a bit.
-    @Input() site?: CoreSiteBasicInfo | CoreSiteInfo; // Site info contains user info.
+    readonly user = input<CoreUserWithAvatar>(); // @todo Fix the accepted type and restrict it a bit.
+    readonly site = input<CoreSiteBasicInfo | CoreSiteInfo>(); // Site info contains user info.
     // The following params will override the ones in user object.
-    @Input() profileUrl?: string;
-    @Input({ transform: toBoolean }) linkProfile = true; // Avoid linking to the profile if wanted.
-    @Input() fullname?: string;
-    @Input() userId?: number; // If provided or found it will be used to link the image to the profile.
-    @Input() courseId?: number;
-    @Input({ transform: toBoolean }) checkOnline = false; // If want to check and show online status.
-    @Input() siteId?: string;
+    readonly profileUrl = input<string>();
+    readonly linkProfile = input(true, { transform: toBoolean }); // Avoid linking to the profile if wanted.
+    readonly fullname = input<string>();
+    readonly userId = input<number>(); // If provided or found it will be used to link the image to the profile.
+    readonly courseId = input<number>();
+    readonly checkOnline = input(false, { transform: toBoolean }); // If want to check and show online status.
+    readonly siteId = input<string>();
 
-    avatarUrl?: string;
-    initials = '';
-    imageError = false;
+    readonly computedUser = resource({
+        params: () => ({
+            user: this.user(),
+            site: this.site(),
+        }),
+        loader: async ({ params }) => {
+            if (params.user) {
+                return params.user;
+            }
+
+            if (!params.site) {
+                return undefined;
+            }
+
+            return {
+                id: ('userid' in params.site ? params.site.userid : params.site.userId)
+                    ?? (await CoreSites.getSite(this.computedSiteId())).getUserId(),
+                fullname: params.site.fullname ?? '',
+                firstname: params.site.firstname ?? '',
+                lastname: params.site.lastname ?? '',
+                profileimageurl: params.site.userpictureurl ?? '',
+            };
+        },
+    });
+
+    readonly computedUserId = computed(() => this.userId() || this.computedUser.value()?.userid || this.computedUser.value()?.id);
+    readonly computedFullname = computed(() =>
+        this.fullname() || this.computedUser.value()?.fullname || this.computedUser.value()?.userfullname);
+
+    readonly computedSiteId = computed(() => {
+        if (this.siteId()) {
+            return this.siteId();
+        }
+
+        const site = this.site();
+
+        return site && 'id' in site ? site.id : CoreSites.getCurrentSiteId();
+    });
+
+    readonly avatarUrl = linkedSignal(() => {
+        const profileUrl = this.profileUrl() || this.computedUser.value()?.profileimageurl ||
+            this.computedUser.value()?.userprofileimageurl || this.computedUser.value()?.userpictureurl ||
+            this.computedUser.value()?.profileimageurlsmall || this.computedUser.value()?.urls?.profileimage;
+
+        if (profileUrl === undefined || CoreUrl.isThemeImageUrl(profileUrl)) {
+            return undefined;
+        }
+
+        return profileUrl;
+    });
+
+    readonly imageError = signal(false);
+
+    readonly initials = resource({
+        params: () => ({
+            user: this.computedUser.value(),
+            fullname: this.computedFullname(),
+            userId: this.computedUserId(),
+        }),
+        loader: async ({ params }) => CoreUserHelper.getUserInitialsFromParts({
+            firstname: params.user?.firstname,
+            lastname: params.user?.lastname,
+            fullname: params.fullname,
+            userId: params.userId,
+        }),
+    });
+
+    protected readonly fallbackUserData = signal<CoreUserWithAvatar|undefined>(undefined);
 
     // Variable to check if we consider this user online or not.
     // @todo Use setting when available (see MDL-63972) so we can use site setting.
     protected timetoshowusers = 300000; // Miliseconds default.
-    protected currentUserId: number;
     protected pictureObserver: CoreEventObserver;
 
     constructor() {
-        this.currentUserId = CoreSites.getCurrentSiteUserId();
-
         this.pictureObserver = CoreEvents.on(
             CORE_USER_PROFILE_PICTURE_UPDATED,
             (data) => {
-                if (data.userId === this.userId) {
-                    this.avatarUrl = data.picture;
+                if (data.userId === this.computedUserId()) {
+                    this.avatarUrl.set(data.picture);
                 }
             },
             CoreSites.getCurrentSiteId(),
@@ -85,33 +147,19 @@ export class CoreUserAvatarComponent implements OnInit, OnChanges, OnDestroy {
      * @inheritdoc
      */
     async ngOnInit(): Promise<void> {
-        this.siteId = this.siteId ?? (this.site && 'id' in this.site
-            ? this.site.id
-            : CoreSites.getCurrentSiteId());
+        const site = this.site();
 
-        if (this.site && !this.user) {
-            this.user = {
-                id: ('userid' in this.site
-                    ? this.site.userid
-                    : this.site.userId)
-                    ?? (await CoreSites.getSite(this.siteId)).getUserId(),
-                fullname: this.site.fullname ?? '',
-                firstname: this.site.firstname ?? '',
-                lastname: this.site.lastname ?? '',
-                profileimageurl: this.site.userpictureurl ?? '',
-            };
-        }
-
-        this.setFields();
-    }
-
-    /**
-     * @inheritdoc
-     */
-    ngOnChanges(changes: { [name: string]: SimpleChange }): void {
-        // If something change, update the fields.
-        if (changes) {
-            this.setFields();
+        if (site && !this.user()) {
+            this.fallbackUserData.set({
+                id: ('userid' in site
+                    ? site.userid
+                    : site.userId)
+                    ?? (await CoreSites.getSite(this.computedSiteId())).getUserId(),
+                fullname: site.fullname ?? '',
+                firstname: site.firstname ?? '',
+                lastname: site.lastname ?? '',
+                profileimageurl: site.userpictureurl ?? '',
+            });
         }
     }
 
@@ -119,36 +167,7 @@ export class CoreUserAvatarComponent implements OnInit, OnChanges, OnDestroy {
      * Avatar image loading handler.
      */
     imageLoaded(success: boolean): void {
-        this.imageError = !success;
-    }
-
-    /**
-     * Set fields from user.
-     */
-    protected async setFields(): Promise<void> {
-        const profileUrl = this.profileUrl || this.user?.profileimageurl || this.user?.userprofileimageurl ||
-            this.user?.userpictureurl || this.user?.profileimageurlsmall || this.user?.urls?.profileimage;
-
-        if (typeof profileUrl === 'string') {
-            this.avatarUrl = profileUrl;
-        }
-
-        this.fullname = this.fullname || this.user?.fullname || this.user?.userfullname;
-
-        if (this.avatarUrl && CoreUrl.isThemeImageUrl(this.avatarUrl)) {
-            this.avatarUrl = undefined;
-        }
-
-        this.userId = this.userId || this.user?.userid || this.user?.id;
-        this.courseId = this.courseId || this.user?.courseid;
-
-        this.initials =
-            await CoreUserHelper.getUserInitialsFromParts({
-                firstname: this.user?.firstname,
-                lastname: this.user?.lastname,
-                fullname: this.fullname,
-                userId: this.userId,
-        });
+        this.imageError.set(!success);
     }
 
     /**
@@ -157,22 +176,23 @@ export class CoreUserAvatarComponent implements OnInit, OnChanges, OnDestroy {
      * @returns boolean
      */
     isOnline(): boolean {
-        if (!this.user) {
+        const user = this.computedUser.value();
+        if (!user) {
             return false;
         }
 
-        if (CoreUtils.isFalseOrZero(this.user.isonline)) {
+        if (CoreUtils.isFalseOrZero(user.isonline)) {
             return false;
         }
 
-        if (this.user.lastaccess) {
+        if (user.lastaccess) {
             // If the time has passed, don't show the online status.
             const time = Date.now() - this.timetoshowusers;
 
-            return this.user.lastaccess * 1000 >= time;
+            return user.lastaccess * 1000 >= time;
         } else {
             // You have to have Internet access first.
-            return !!this.user.isonline && CoreNetwork.isOnline();
+            return !!user.isonline && CoreNetwork.isOnline();
         }
     }
 
@@ -182,7 +202,7 @@ export class CoreUserAvatarComponent implements OnInit, OnChanges, OnDestroy {
      * @param event Click event.
      */
     gotoProfile(event: Event): void {
-        if (!this.linkProfile || !this.userId) {
+        if (!this.linkProfile() || !this.computedUserId()) {
             return;
         }
 
@@ -191,8 +211,8 @@ export class CoreUserAvatarComponent implements OnInit, OnChanges, OnDestroy {
 
         CoreNavigator.navigateToSitePath('user', {
             params: {
-                userId: this.userId,
-                courseId: this.courseId,
+                userId: this.computedUserId(),
+                courseId: this.courseId() || this.computedUser.value()?.courseid,
             },
         });
     }
