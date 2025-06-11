@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Component, OnInit, OnDestroy, Input } from '@angular/core';
+import { Component, OnInit, OnDestroy, input, computed, signal, resource, linkedSignal } from '@angular/core';
 import { CoreSites } from '@services/sites';
 import { CoreEventObserver, CoreEvents } from '@singletons/events';
 import { CoreSite } from '@classes/sites/site';
@@ -39,20 +39,74 @@ import { CoreFormatTextDirective } from '@directives/format-text';
 })
 export class CoreSiteLogoComponent implements OnInit, OnDestroy {
 
-    @Input({ transform: toBoolean }) hideOnError = false;
-    @Input() siteNameMode: CoreSiteLogoSiteNameMode = CoreSiteLogoSiteNameMode.NOTAG;
-    @Input({ transform: toBoolean }) showLogo = true;
-    @Input() site?: CoreSite | CoreUnauthenticatedSite;
-    @Input() logoType: 'top' | 'login' = 'login';
+    readonly hideOnError = input(false, { transform: toBoolean });
+    readonly siteNameMode = input<CoreSiteLogoSiteNameMode>(CoreSiteLogoSiteNameMode.NOTAG);
+    readonly showLogo = input(true);
+    readonly site = input<CoreSite | CoreUnauthenticatedSite>();
+    readonly logoType = input<'top' | 'login'>('login');
+    readonly logoLoaded = signal(false);
+    readonly logoError = signal(false);
+    readonly fallbackLogo = computed(() => this.logoType() === 'top' ? 'assets/img/top_logo.png' : 'assets/img/login_logo.png');
+    readonly isLogoTopAndHidden = computed(() => this.logoType() === 'top' && this.siteInstance().getShowTopLogo() === 'hidden');
+    readonly showSiteName = computed(() => this.logoType() !== 'top' || this.siteInstance().getShowTopLogo() === 'hidden');
+    readonly appName = CoreConstants.CONFIG.appname;
 
-    siteName?: string;
-    siteId?: string;
-    siteLogo?: string;
-    logoLoaded = false;
-    logoError = false;
-    fallbackLogo = '';
-    showSiteName = true;
-    appName = CoreConstants.CONFIG.appname;
+    readonly siteId = computed(() => {
+        const site = this.siteInstance();
+
+        return site instanceof CoreSite ? site.getId() : undefined;
+    });
+
+    readonly siteName = resource({
+        params: () => ({
+            showSiteName: this.showSiteName(),
+            siteInfo: this.siteInfo(), // Update name if site info changes, but use getSiteName instead of the info directly.
+        }),
+        loader: async ({ params }): Promise<string> => {
+            if (!params.showSiteName) {
+                return '';
+            }
+
+            const siteName = await this.siteInstance().getSiteName();
+
+            return siteName || '';
+        },
+    });
+
+    readonly displaySiteLogo = computed(() => {
+        if (this.logoError() && this.hideOnError()) {
+            return false;
+        }
+
+        if (this.isLogoTopAndHidden()) {
+            return false;
+        }
+
+        return this.showLogo();
+    });
+
+    readonly siteLogo = resource({
+        params: () => ({
+            siteInfo: this.siteInfo(),
+            logoType: this.logoType(),
+            showLogo: this.showLogo(),
+        }),
+        loader: async ({ params }): Promise<string | undefined> => {
+            const logoUrl = !this.isLogoTopAndHidden() && params.showLogo ? await this.getLogoUrl() : undefined;
+
+            this.logoError.set(false);
+            this.logoLoaded.set(true);
+
+            return logoUrl;
+        },
+    });
+
+    protected readonly siteInstance = computed(() => this.site() ?? CoreSites.getRequiredCurrentSite());
+    protected readonly siteInfo = linkedSignal(() => { // Used to notify when the site info could have changed, to update info.
+        const site = this.siteInstance();
+
+        return site instanceof CoreSite ? site.getInfo() : undefined;
+    });
 
     protected updateSiteObserver?: CoreEventObserver;
 
@@ -60,69 +114,32 @@ export class CoreSiteLogoComponent implements OnInit, OnDestroy {
      * @inheritdoc
      */
     async ngOnInit(): Promise<void> {
-        this.loadSite();
-
-        this.updateSiteObserver = CoreEvents.on(CoreEvents.SITE_UPDATED, async () => {
-            await this.loadInfo();
-        }, this.siteId);
-
-        this.fallbackLogo = this.logoType === 'top' ? 'assets/img/top_logo.png' : 'assets/img/login_logo.png';
-        this.showSiteName = this.logoType !== 'top';
-
-        await this.loadInfo();
+        this.updateSiteObserver = CoreEvents.on(CoreEvents.SITE_UPDATED, async (data) => {
+            if (data.siteId === this.siteId()) {
+                this.siteInfo.set(data);
+            }
+        }, this.siteId());
     }
 
     /**
      * Function to handle the image loaded.
      */
     imageLoaded(success: boolean): void {
-        if (!success && this.hideOnError) {
-            this.showLogo = false;
-        }
-
-        this.logoError = !success;
+        this.logoError.set(!success);
     }
 
     /**
-     * Load the site and siteId.
+     * Get the site logo URL.
      *
-     * @returns Site.
+     * @returns Logo URL.
      */
-    protected loadSite(): CoreSite | CoreUnauthenticatedSite {
-        this.site = this.site ?? CoreSites.getRequiredCurrentSite();
+    protected async getLogoUrl(): Promise<string | undefined> {
+        // Get the public config to avoid race conditions when retrieving the logo.
+        const siteConfig = await CorePromiseUtils.ignoreErrors(this.siteInstance().getPublicConfig());
 
-        // During login, the siteId could be not defined yet.
-        if (!this.siteId && this.site instanceof CoreSite) {
-            this.siteId = this.site.getId();
-        }
-
-        return this.site;
-   }
-
-    /**
-     * Load the site name and logo.
-     */
-    protected async loadInfo(): Promise<void> {
-        const site = this.loadSite();
-
-        this.siteName = await site.getSiteName() || '';
-
-        this.showSiteName = this.logoType !== 'top' || site.getShowTopLogo() === 'hidden';
-
-        this.logoError = false;
-
-        if (this.logoType === 'top' && site.getShowTopLogo() === 'hidden') {
-            this.showLogo = false;
-        } else {
-            // Get the public config to avoid race conditions when retrieving the logo.
-            const siteConfig = await CorePromiseUtils.ignoreErrors(site.getPublicConfig());
-
-            this.siteLogo = this.logoType === 'top'
-                ? site.getTopLogoUrl(siteConfig)
-                : site.getLogoUrl(siteConfig);
-        }
-
-        this.logoLoaded = true;
+        return this.logoType() === 'top'
+            ? this.siteInstance().getTopLogoUrl(siteConfig)
+            : this.siteInstance().getLogoUrl(siteConfig);
     }
 
     /**
