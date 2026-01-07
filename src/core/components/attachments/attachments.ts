@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, computed, input, model, resource } from '@angular/core';
 import { FileEntry } from '@awesome-cordova-plugins/file/ngx';
 
 import { CoreFileUploader, CoreFileUploaderTypeList } from '@features/fileuploader/services/fileuploader';
@@ -39,13 +39,13 @@ import { CoreUpdateNonReactiveAttributesDirective } from '@directives/update-non
 /**
  * Component to render attachments, allow adding more and delete the current ones.
  *
- * All the changes done will be applied to the "files" input array, no file will be uploaded. The component using this
+ * All the changes done will be applied to the "files" input array, no file will be uploaded. The code using this
  * component should be the one uploading and moving the files.
  *
  * All the files added will be copied to the app temporary folder, so they should be deleted after uploading them
  * or if the user cancels the action.
  *
- * <core-attachments [files]="files" [maxSize]="configs.maxsubmissionsizebytes" [maxSubmissions]="configs.maxfilesubmissions"
+ * <core-attachments [(files)]="files" [maxSize]="configs.maxsubmissionsizebytes" [maxSubmissions]="configs.maxfilesubmissions"
  *     [component]="component" [componentId]="assign.cmid" [acceptedTypes]="configs.filetypeslist" [allowOffline]="allowOffline">
  * </core-attachments>
  */
@@ -63,74 +63,86 @@ import { CoreUpdateNonReactiveAttributesDirective } from '@directives/update-non
         CoreMarkRequiredComponent,
     ],
 })
-export class CoreAttachmentsComponent implements OnInit {
+export class CoreAttachmentsComponent {
 
-    @Input() files: CoreFileEntry[] = []; // List of attachments. New attachments will be added to this array.
-    @Input() maxSize?: number; // Max size. -1 means unlimited, 0 means course/user max size, not defined means unknown.
-    @Input() maxSubmissions?: number; // Max number of attachments. -1 means unlimited, not defined means unknown limit.
-    @Input() component?: string; // Component the downloaded files will be linked to.
-    @Input() componentId?: string | number; // Component ID.
-    @Input({ transform: toBoolean }) allowOffline = false; // Whether to allow selecting files in offline.
-    @Input() acceptedTypes?: string; // List of supported filetypes. If undefined, all types supported.
-    @Input({ transform: toBoolean }) required = false; // Whether to display the required mark.
-    @Input() courseId?: number; // Course ID.
-    @Input() title = Translate.instant('core.fileuploader.attachedfiles'); // Title to display.
+    // TODO: Document breaking change and change all usages to use [(files)].
+    readonly files = model<CoreFileEntry[]>([]); // List of attachments.
+    readonly maxSize = input<number>(); // Max size. -1 means unlimited, 0 means course/user max size, not defined means unknown.
+    readonly maxSubmissions = input<number>(); // Max number of attachments. -1 means unlimited, not defined means unknown limit.
+    readonly component = input<string>(); // Component the downloaded files will be linked to.
+    readonly componentId = input<string | number>(); // Component ID.
+    readonly allowOffline = input(false, { transform: toBoolean }); // Whether to allow selecting files in offline.
+    readonly acceptedTypes = input<string>(); // List of supported filetypes. If undefined, all types supported.
+    readonly required = input(false, { transform: toBoolean }); // Whether to display the required mark.
+    readonly courseId = input<number>(); // Course ID.
+    readonly title = input(Translate.instant('core.fileuploader.attachedfiles')); // Title to display.
 
-    maxSizeReadable?: string;
-    maxSubmissionsReadable?: string;
-    unlimitedFiles?: boolean;
-    fileTypes?: CoreFileUploaderTypeList;
-    loaded = false;
+    // The calculated max size, taking into account course/user limits if needed. NaN means unknown max size.
+    readonly calculatedMaxSize = resource({
+        params: () => ({
+            maxSize: this.maxSize(),
+            courseId: this.courseId(),
+        }),
+        loader: async ({ params }): Promise<number> => {
+            const maxSize = params.maxSize !== null ? Number(params.maxSize) : NaN;
+            if (maxSize !== 0) {
+                return maxSize;
+            }
 
-    /**
-     * @inheritdoc
-     */
-    async ngOnInit(): Promise<void> {
-        this.files = this.files || [];
-        this.maxSize = this.maxSize !== null ? Number(this.maxSize) : NaN;
+            return await this.getMaxSizeOfArea(params.courseId);
+        },
+    });
 
-        if (this.maxSize === 0) {
-            await this.getMaxSizeOfArea();
-        } else if (this.maxSize > 0) {
-            this.maxSizeReadable = CoreText.bytesToSize(this.maxSize, 2);
-        } else if (this.maxSize === -1) {
-            this.maxSizeReadable = Translate.instant('core.unlimited');
+    readonly maxSizeReadable = computed(() => {
+        const maxSize = this.calculatedMaxSize.value();
+
+        if (maxSize !== undefined && maxSize >= 0) {
+            return CoreText.bytesToSize(maxSize, 2);
+        } else if (maxSize === -1) {
+            return Translate.instant('core.unlimited');
         } else {
-            this.maxSizeReadable = Translate.instant('core.unknown');
+            return Translate.instant('core.unknown');
         }
+    });
 
-        if (this.maxSubmissions === undefined || this.maxSubmissions < 0) {
-            this.maxSubmissionsReadable = this.maxSubmissions === undefined ?
-                Translate.instant('core.unknown') : undefined;
-            this.unlimitedFiles = true;
+    readonly maxSubmissionsReadable = computed((): string | undefined => {
+        const maxSubmissions = this.maxSubmissions();
+        if (maxSubmissions === undefined || maxSubmissions < 0) {
+            return maxSubmissions === undefined ? Translate.instant('core.unknown') : undefined;
         } else {
-            this.maxSubmissionsReadable = String(this.maxSubmissions);
+            return String(maxSubmissions);
         }
+    });
 
-        this.acceptedTypes = this.acceptedTypes?.trim();
+    readonly canAddFile = computed(() => {
+        const maxSubmissions = this.maxSubmissions();
 
-        if (this.acceptedTypes && this.acceptedTypes != '*') {
-            this.fileTypes = CoreFileUploader.prepareFiletypeList(this.acceptedTypes);
-        }
+        return (maxSubmissions === undefined || maxSubmissions < 0) ?
+            true : // Unlimited files.
+            this.files().length < maxSubmissions;
+    });
 
-        this.loaded = true;
-    }
+    readonly fileTypes = computed<CoreFileUploaderTypeList | undefined>(() => {
+        const acceptedTypes = this.acceptedTypes()?.trim();
+
+        return acceptedTypes && acceptedTypes !== '*' ?
+            CoreFileUploader.prepareFiletypeList(acceptedTypes) :
+            undefined;
+    });
 
     /**
      * Get max size of the area.
      *
-     * @returns Promise resolved when done.
+     * @param courseId Course ID.
+     * @returns Max size, NaN if not found.
      */
-    protected async getMaxSizeOfArea(): Promise<void> {
-        if (this.courseId) {
+    protected async getMaxSizeOfArea(courseId?: number): Promise<number> {
+        if (courseId) {
             // Check course max size.
-            const course = await CorePromiseUtils.ignoreErrors(CoreCourses.getCourseByField('id', this.courseId));
+            const course = await CorePromiseUtils.ignoreErrors(CoreCourses.getCourseByField('id', courseId));
 
             if (course?.maxbytes) {
-                this.maxSize = course.maxbytes;
-                this.maxSizeReadable = CoreText.bytesToSize(this.maxSize, 2);
-
-                return;
+                return course.maxbytes;
             }
         }
 
@@ -138,30 +150,31 @@ export class CoreAttachmentsComponent implements OnInit {
         const currentSite = CoreSites.getCurrentSite();
         const siteInfo = currentSite?.getInfo();
 
-        if (siteInfo?.usermaxuploadfilesize) {
-            this.maxSize = siteInfo.usermaxuploadfilesize;
-            this.maxSizeReadable = CoreText.bytesToSize(this.maxSize, 2);
-        } else {
-            this.maxSizeReadable = Translate.instant('core.unknown');
-        }
+        return siteInfo?.usermaxuploadfilesize ?? NaN;
     }
 
     /**
      * Add a new attachment.
      */
     async add(): Promise<void> {
-        if (!this.allowOffline && !CoreNetwork.isOnline()) {
+        const allowOffline = this.allowOffline();
+        if (!allowOffline && !CoreNetwork.isOnline()) {
             CoreAlerts.showError(Translate.instant('core.fileuploader.errormustbeonlinetoupload'));
 
             return;
         }
 
-        const mimetypes = this.fileTypes && this.fileTypes.mimetypes;
+        if (this.calculatedMaxSize.isLoading()) {
+            // The template shouldn't allow adding a file while the max size is being calculated.
+            return;
+        }
+
+        const mimetypes = this.fileTypes()?.mimetypes;
 
         try {
-            const result = await CoreFileUploaderHelper.selectFile(this.maxSize, this.allowOffline, undefined, mimetypes);
+            const result = await CoreFileUploaderHelper.selectFile(this.calculatedMaxSize.value(), allowOffline, undefined, mimetypes);
 
-            this.files?.push(result);
+            this.files.update(files => files.concat(result));
         } catch (error) {
             CoreAlerts.showError(error, { default: 'Error selecting file.' });
         }
@@ -185,7 +198,7 @@ export class CoreAttachmentsComponent implements OnInit {
         }
 
         // Status message for screen readers.
-        const file = this.files[index];
+        const file = this.files()[index];
         if (file) {
             const filename = (file as CoreWSFile).filename ?? (file as FileEntry).name;
             if (filename) {
@@ -197,7 +210,7 @@ export class CoreAttachmentsComponent implements OnInit {
         }
 
         // Remove the file from the list.
-        this.files?.splice(index, 1);
+        this.files.update(files => files.filter((file, i) => i !== index));
     }
 
     /**
@@ -207,7 +220,9 @@ export class CoreAttachmentsComponent implements OnInit {
      * @param data The data received.
      */
     renamed(index: number, data: { file: FileEntry }): void {
-        this.files[index] = data.file;
+        this.files.update(files => files.map((file, i) => {
+            return i === index ? data.file : file;
+        }));
     }
 
 }
