@@ -850,7 +850,9 @@ export class CoreFormatTextDirective implements OnDestroy, AsyncDirective {
                     }
                 }
 
-                if (openInApp) {
+                if (element.dataset.openIn === CoreLinkOpenMethod.EMBEDDED) {
+                    CoreViewer.openIframeViewer('', url);
+                } else if (openInApp) {
                     site.openInAppWithAutoLogin(url);
 
                     if (refreshOnResume && this.refreshContext) {

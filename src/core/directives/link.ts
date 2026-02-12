@@ -28,6 +28,7 @@ import { CoreDom } from '@static/dom';
 import { toBoolean } from '../transforms/boolean';
 import { CoreLoadings } from '@services/overlays/loadings';
 import { CoreAlerts } from '@services/overlays/alerts';
+import { CoreViewer } from '@features/viewer/services/viewer';
 
 /**
  * Directive to open a link in external browser or in the app.
@@ -227,7 +228,9 @@ export class CoreLinkDirective implements OnInit {
             }
         }
 
-        if (this.autoLogin) {
+        if (openIn === CoreLinkOpenMethod.EMBEDDED) {
+            CoreViewer.openIframeViewer('', href, this.autoLogin);
+        } else if (this.autoLogin) {
             if (openInApp) {
                 await currentSite.openInAppWithAutoLogin(href);
             } else {
