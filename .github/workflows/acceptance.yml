@@ -176,7 +176,7 @@ jobs:
                   MOODLE_REPO: ${{ github.event.inputs.moodle_repository || 'https://github.com/moodle/moodle.git' }}
                   MOODLE_BEHAT_IONIC_WWWROOT: https://localhost:8001
                   MOODLE_BEHAT_DEFAULT_BROWSER: chrome
-                  MOODLE_BEHAT_CHROME_CAPABILITIES: "['extra_capabilities' => ['chromeOptions' => ['args' => ['--ignore-certificate-errors', '--allow-running-insecure-content'], 'prefs' => ['credentials_enable_service' => false, 'profile.password_manager_enabled' => false, 'profile.password_manager_leak_detection' => false]]]]"
+                  MOODLE_BEHAT_CHROME_CAPABILITIES: "['extra_capabilities' => ['chromeOptions' => ['args' => ['--ignore-certificate-errors', '--allow-running-insecure-content'], 'prefs' => ['credentials_enable_service' => false, 'profile.password_manager_enabled' => false, 'profile.password_manager_leak_detection' => false]], 'goog:loggingPrefs' => ['browser' => 'ALL']]]"
 
             - name: Update config
               run: moodle-plugin-ci add-config 'define("TEST_MOD_BIGBLUEBUTTONBN_MOCK_SERVER", "http://localhost:8002/hash" . sha1($CFG->wwwroot));'
@@ -214,6 +214,49 @@ jobs:
               with:
                   name: behat_failures-${{ env.PARALLEL_NAME }}
                   path: moodledata/behat_dump/*
+                  if-no-files-found: ignore
+
+            - name: Collect browser logs
+              if: ${{ failure() && steps.run-behat-tests.conclusion == 'failure' }}
+              run: |
+                  mkdir -p browser_logs
+
+                  # Collect browser console logs from Behat dump directory (dumped by AfterScenario hook)
+                  if [ -d "moodledata/behat_dump" ]; then
+                    find moodledata/behat_dump -name "*browser_console*.log" -type f -exec cp {} browser_logs/ \; 2>/dev/null || true
+                    find moodledata/behat_dump -name "*browser_log_debug*.txt" -type f -exec cp {} browser_logs/ \; 2>/dev/null || true
+                  fi
+
+                  # Collect any other log files from moodledata
+                  find moodledata -name "*.log" -type f -exec sh -c 'cp "$1" "browser_logs/$(basename $(dirname $1))_$(basename $1)"' _ {} \; 2>/dev/null || true
+
+                  # Try to get logs from the Docker container
+                  docker logs moodleapp > browser_logs/nginx_docker.log 2>&1 || true
+
+                  # Check Selenium/Chrome logs if they exist
+                  find /tmp -name "chrome*.log" -type f -exec cp {} browser_logs/ \; 2>/dev/null || true
+
+                  # List what we found
+                  echo "Collected browser logs:"
+                  ls -la browser_logs/ || echo "No logs found"
+
+                  # Show a sample of each log file (first 50 lines)
+                  for log in browser_logs/*.log; do
+                    if [ -f "$log" ]; then
+                      echo "=== Sample from $(basename $log) ==="
+                      head -n 50 "$log"
+                      echo ""
+                    fi
+                  done
+
+            - name: Upload browser logs
+              uses: actions/upload-artifact@v4
+              if: ${{ failure() && steps.run-behat-tests.conclusion == 'failure' }}
+              env:
+                  PARALLEL_NAME: ${{ steps.filename.outputs.PARALLEL_NAME }}
+              with:
+                  name: browser_logs-${{ env.PARALLEL_NAME }}
+                  path: browser_logs/*
                   if-no-files-found: ignore
 
             - name: Mark cancelled jobs as failed.

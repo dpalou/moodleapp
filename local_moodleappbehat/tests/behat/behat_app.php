@@ -21,6 +21,7 @@ require_once(__DIR__ . '/behat_app_helper.php');
 
 use Behat\Behat\Hook\Scope\ScenarioScope;
 use Behat\Behat\Hook\Scope\AfterStepScope;
+use Behat\Behat\Hook\Scope\AfterScenarioScope;
 use Behat\Gherkin\Node\TableNode;
 use Behat\Mink\Exception\DriverException;
 use Behat\Mink\Exception\ExpectationException;
@@ -49,6 +50,8 @@ class behat_app extends behat_app_helper {
     protected $coveragepath;
     protected $scenarioslug;
     protected $scenariolaststep;
+    protected $consoleLogs = [];
+    protected $phpLogs = [];
 
     /**
      * @BeforeScenario @app
@@ -62,6 +65,10 @@ class behat_app extends behat_app_helper {
         $this->scenariolaststep = $steps[count($steps) - 1];
         $this->featurepath = dirname($feature->getFile());
         $this->coveragepath = get_config('local_moodleappbehat', 'coverage_path') ?: ($this->featurepath . DIRECTORY_SEPARATOR . 'coverage' . DIRECTORY_SEPARATOR);
+
+        // Clear console logs for this scenario
+        $this->consoleLogs = [];
+        $this->phpLogs = [];
     }
 
     /**
@@ -69,6 +76,37 @@ class behat_app extends behat_app_helper {
      */
     public function after_step(AfterStepScope $scope) {
         $step = $scope->getStep();
+
+        // Collect console logs after each step
+        try {
+            $windowNames = $this->get_window_names();
+            $result = $this->runtime_js('getConsoleLogs()');
+
+            if (substr($result, 0, 3) === 'OK:') {
+                $logsJson = substr($result, 3);
+                $logs = json_decode($logsJson, true);
+
+                if (is_array($logs) && !empty($logs)) {
+                    fwrite(STDERR, "[DEBUG] After step '" . $step->getText() . "', logs found: " . count($logs) . "\n");
+                    // Append logs to our accumulated array
+                    $this->consoleLogs = array_merge($this->consoleLogs, $logs);
+
+                    // Clear the logs in JavaScript so we don't get them again
+                    $this->runtime_js('clearConsoleLogs()');
+                }
+            } else {
+                fwrite(STDERR, "[DEBUG] After step '" . $step->getText() . "', getConsoleLogs() returned error: $result\n");
+            }
+
+            // This is a test to compare the logs obtained via PHP WebDriver and the JS method.
+            $webdriver = $this->getSession()->getDriver()->getWebDriver();
+            if ($webdriver) {
+                $logs = $webdriver->manage()->getLog('browser');
+                $this->phpLogs = array_merge($this->phpLogs, $logs);
+            }
+        } catch (Exception $e) {
+            // Silently ignore errors collecting console logs
+        }
 
         if ($step !== $this->scenariolaststep || empty($this->coveragepath)) {
             return;
@@ -84,6 +122,61 @@ class behat_app extends behat_app_helper {
 
         if (!is_null($coverage)) {
             file_put_contents($this->coveragepath . $this->scenarioslug . '.json', $coverage);
+        }
+    }
+
+    /**
+     * @AfterScenario @app
+     */
+    public function after_scenario(AfterScenarioScope $scope) {
+        // Dump browser console logs on test failure.
+        if (!$scope->getTestResult()->isPassed()) {
+            fwrite(STDERR, "[DEBUGEND] JS Logs: " . count($this->consoleLogs) . "\n");
+            fwrite(STDERR, "[DEBUGEND] PHP Logs: " . count($this->phpLogs) . "\n");
+            $this->dump_browser_console_logs_js($scope);
+        }
+    }
+
+    /**
+     * Dump browser console logs to a file using JavaScript-based capture.
+     *
+     * This uses logs that were accumulated during the test execution in the $consoleLogs array.
+     *
+     * @param AfterScenarioScope $scope
+     */
+    protected function dump_browser_console_logs_js(AfterScenarioScope $scope) {
+        global $CFG;
+
+        if (empty($this->consoleLogs)) {
+            return;
+        }
+
+        $dumpdir = $CFG->behat_dataroot . '/behat_dump';
+        if (!is_dir($dumpdir)) {
+            mkdir($dumpdir, 0777, true);
+        }
+
+        try {
+            $logfile = $dumpdir . '/browser_console_' . $this->scenarioslug . '_' . time() . '.log';
+
+            $logcontent = "Browser Console Logs for: " . $scope->getScenario()->getTitle() . "\n";
+            $logcontent .= "Feature: " . $scope->getFeature()->getTitle() . "\n";
+            $logcontent .= "Time: " . date('Y-m-d H:i:s') . "\n";
+            $logcontent .= "Total log entries: " . count($this->consoleLogs) . "\n";
+            $logcontent .= str_repeat('=', 80) . "\n\n";
+
+            foreach ($this->consoleLogs as $log) {
+                $timestamp = $log['timestamp'] ?? date('Y-m-d H:i:s');
+                $level = strtoupper($log['level'] ?? 'LOG');
+                $message = $log['message'] ?? '';
+
+                $logcontent .= "[{$timestamp}] [{$level}] {$message}\n";
+            }
+
+            file_put_contents($logfile, $logcontent);
+
+        } catch (Exception $e) {
+            fwrite(STDERR, "[DEBUG] Exception in dump_browser_console_logs_js: " . $e->getMessage() . "\n");
         }
     }
 

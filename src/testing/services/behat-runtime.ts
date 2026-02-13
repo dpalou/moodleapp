@@ -45,6 +45,7 @@ import { CoreOpener } from '@static/opener';
 export class TestingBehatRuntimeService {
 
     protected initialized = false;
+    protected consoleLogs: Array<{ timestamp: string; level: string; message: string }> = [];
     protected openedUrls: {
         args: GetClosureArgs<Window['open']>;
         contents?: string;
@@ -91,6 +92,9 @@ export class TestingBehatRuntimeService {
         this.initialized = true;
         TestingBehatBlocking.init();
 
+        // Capture console logs for debugging test failures
+        this.initConsoleCapture();
+
         if (options.configOverrides) {
             this.patchEnvironment(options.configOverrides, true);
         }
@@ -134,6 +138,60 @@ export class TestingBehatRuntimeService {
         } catch (error) {
             return `ERROR: ${error instanceof Error ? error.message : error}`;
         }
+    }
+
+    /**
+     * Initialize console capture to record console logs, warnings, and errors.
+     */
+    protected initConsoleCapture(): void {
+        const captureLog = (level: string, originalMethod: (...args: unknown[]) => void) => (...args: unknown[]) => {
+                // Store the log entry
+                const timestamp = new Date().toISOString();
+                const message = args.map(arg => {
+                    try {
+                        if (typeof arg === 'string') {
+                            return arg;
+                        }
+
+                        return JSON.stringify(arg);
+                    } catch {
+                        return String(arg);
+                    }
+                }).join(' ');
+
+                this.consoleLogs.push({ timestamp, level, message });
+
+                // Keep only the last 1000 log entries to avoid memory issues
+                if (this.consoleLogs.length > 1000) {
+                    this.consoleLogs.shift();
+                }
+
+                // Call the original console method
+                originalMethod.apply(console, args);
+            };
+
+        // Override console methods
+        console.log = captureLog('LOG', console.log);
+        console.info = captureLog('INFO', console.info);
+        console.warn = captureLog('WARN', console.warn);
+        console.error = captureLog('ERROR', console.error);
+        console.debug = captureLog('DEBUG', console.debug);
+    }
+
+    /**
+     * Get captured console logs.
+     *
+     * @returns JSON string of captured console logs.
+     */
+    getConsoleLogs(): string {
+        return 'OK:' + JSON.stringify(this.consoleLogs);
+    }
+
+    /**
+     * Clear captured console logs.
+     */
+    clearConsoleLogs(): void {
+        this.consoleLogs = [];
     }
 
     /**
