@@ -13,9 +13,15 @@
 // limitations under the License.
 
 import { HttpResponse as AngularHttpResponse, HttpHeaders } from '@angular/common/http';
-import { HTTPResponse as NativeHttpResponse } from '@awesome-cordova-plugins/http/ngx';
 
-const HTTP_STATUS_MESSAGES = {
+export type CoreNativeHttpResponse<T = unknown> = {
+    data: T;
+    headers: Record<string, string | string[]>;
+    status: number;
+    url?: string;
+};
+
+const HTTP_STATUS_MESSAGES: Record<string, string> = {
     100: 'Continue',
     101: 'Switching Protocol',
     102: 'Processing',
@@ -82,16 +88,16 @@ const HTTP_STATUS_MESSAGES = {
 };
 
 /**
- * Class that adapts a Cordova plugin http response to an Angular http response.
+ * Class that adapts a native HTTP response to an Angular HTTP response.
  */
 export class CoreNativeToAngularHttpResponse<T> extends AngularHttpResponse<T> {
 
-    constructor(protected nativeResponse: NativeHttpResponse) {
+    constructor(protected nativeResponse: CoreNativeHttpResponse<T>) {
         super({
             body: nativeResponse.data,
             headers: new HttpHeaders(nativeResponse.headers),
             status: nativeResponse.status,
-            statusText: HTTP_STATUS_MESSAGES[nativeResponse.status] || '',
+            statusText: HTTP_STATUS_MESSAGES[String(nativeResponse.status)] || '',
             url: nativeResponse.url || '',
         });
     }

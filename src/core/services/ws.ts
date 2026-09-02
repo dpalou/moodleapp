@@ -14,14 +14,14 @@
 
 import { Injectable } from '@angular/core';
 import { HttpResponse, HttpParams, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
+import { CapacitorHttp, type HttpOptions as CapacitorHttpRequestOptions } from '@capacitor/core';
 
 import { FileEntry } from '@awesome-cordova-plugins/file/ngx';
-import { HTTPResponse as NativeHttpResponse } from '@awesome-cordova-plugins/http/ngx';
 import { Md5 } from 'ts-md5';
 import { Observable, firstValueFrom } from 'rxjs';
 import { timeout } from 'rxjs/operators';
 
-import { CoreNativeToAngularHttpResponse } from '@classes/native-to-angular-http';
+import { CoreNativeHttpResponse, CoreNativeToAngularHttpResponse } from '@classes/native-to-angular-http';
 import { CoreNetwork } from '@services/network';
 import { CoreFile, CoreFileFormat } from '@services/file';
 import { CoreMimetype } from '@static/mimetype';
@@ -29,7 +29,7 @@ import { CoreText } from '@static/text';
 import { MINIMUM_MOODLE_VERSION } from '@/core/constants';
 import { CoreError } from '@classes/errors/error';
 import { CoreInterceptor } from '@classes/interceptor';
-import { makeSingleton, Translate, Http, NativeHttp } from '@singletons';
+import { makeSingleton, Translate, Http } from '@singletons';
 import { CoreLogger } from '@static/logger';
 import { CoreWSError } from '@classes/errors/wserror';
 import { CoreAjaxError } from '@classes/errors/ajaxerror';
@@ -46,6 +46,23 @@ import { CoreErrorLogs } from '@static/error-logs';
 import { CoreErrorHelper, CoreErrorObject } from './error-helper';
 import { CoreDom } from '@static/dom';
 import { CoreUserNullSupportConfig } from '@features/user/classes/support/null-support-config';
+
+const NATIVE_HTTP_ERROR_STATUS = {
+    sslException: -2,
+    serverNotFound: -3,
+    timeout: -4,
+    unsupportedUrl: -5,
+    notConnected: -6,
+    postProcessingFailed: -7,
+    aborted: -8,
+} as const;
+
+type CoreNativeHttpError = {
+    status: number;
+    error?: unknown;
+    headers?: Record<string, string | string[]>;
+    url?: string;
+};
 
 /**
  * This service allows performing WS calls and download/upload files.
@@ -541,7 +558,7 @@ export class CoreWSProvider {
             }
 
             return data.data;
-        }, async (data: HttpErrorResponse) => {
+        }, async (data: HttpErrorResponse | CoreNativeHttpError) => {
             const message = CoreSites.isLoggedIn()
                 ? Translate.instant('core.siteunavailablehelp', { site: CoreSites.getCurrentSite()?.siteUrl })
                 : Translate.instant('core.sitenotfoundhelp');
@@ -555,7 +572,7 @@ export class CoreWSProvider {
 
             if (CorePlatform.isMobile()) {
                 switch (data.status) {
-                    case NativeHttp.ErrorCode.SSL_EXCEPTION:
+                    case NATIVE_HTTP_ERROR_STATUS.sslException:
                         options.debug = {
                             code: 'invalidcertificate',
                             details: Translate.instant('core.certificaterror', {
@@ -563,38 +580,38 @@ export class CoreWSProvider {
                             }),
                         };
                         break;
-                    case NativeHttp.ErrorCode.SERVER_NOT_FOUND:
+                    case NATIVE_HTTP_ERROR_STATUS.serverNotFound:
                         options.debug = {
                             code: 'servernotfound',
                             details: CoreErrorHelper.getErrorMessageFromError(data.error) ?? 'Server could not be found',
                         };
                         break;
-                    case NativeHttp.ErrorCode.TIMEOUT:
+                    case NATIVE_HTTP_ERROR_STATUS.timeout:
                         options.debug = {
                             code: 'requesttimeout',
                             details: CoreErrorHelper.getErrorMessageFromError(data.error) ?? 'Request timed out',
                         };
                         break;
-                    case NativeHttp.ErrorCode.UNSUPPORTED_URL:
+                    case NATIVE_HTTP_ERROR_STATUS.unsupportedUrl:
                         options.debug = {
                             code: 'unsupportedurl',
                             details: CoreErrorHelper.getErrorMessageFromError(data.error) ?? 'Url not supported',
                         };
                         break;
-                    case NativeHttp.ErrorCode.NOT_CONNECTED:
+                    case NATIVE_HTTP_ERROR_STATUS.notConnected:
                         options.debug = {
                             code: 'connectionerror',
                             details: CoreErrorHelper.getErrorMessageFromError(data.error)
                                 ?? 'Connection error, is network available?',
                         };
                         break;
-                    case NativeHttp.ErrorCode.ABORTED:
+                    case NATIVE_HTTP_ERROR_STATUS.aborted:
                         options.debug = {
                             code: 'requestaborted',
                             details: CoreErrorHelper.getErrorMessageFromError(data.error) ?? 'Request aborted',
                         };
                         break;
-                    case NativeHttp.ErrorCode.POST_PROCESSING_FAILED:
+                    case NATIVE_HTTP_ERROR_STATUS.postProcessingFailed:
                         options.debug = {
                             code: 'requestprocessingfailed',
                             details: CoreErrorHelper.getErrorMessageFromError(data.error) ?? 'Request processing failed',
@@ -1182,7 +1199,7 @@ export class CoreWSProvider {
     }
 
     /**
-     * Send an HTTP request. In mobile devices it will use the cordova plugin.
+     * Send an HTTP request. In mobile devices it will use CapacitorHttp.
      *
      * @param url URL of the request.
      * @param options Options for the request.
@@ -1194,7 +1211,7 @@ export class CoreWSProvider {
         options.timeout = options.timeout === undefined ? this.getRequestTimeout() : options.timeout;
 
         if (CorePlatform.isMobile()) {
-            // Use the cordova plugin.
+            // Use Capacitor's native HTTP implementation.
             if (url.startsWith('file://')) {
                 // We cannot load local files using the http native plugin. Use file provider instead.
                 const content = options.responseType === 'json' ?
@@ -1210,16 +1227,40 @@ export class CoreWSProvider {
                 });
             }
 
-            let response: NativeHttpResponse;
+            const headers = {
+                ...options.headers,
+            };
+
+            if (!headers['User-Agent'] && !headers['user-agent']) {
+                headers['User-Agent'] = navigator.userAgent;
+            }
+
+            let response: CoreNativeHttpResponse<T>;
             let redirectUrl: string | null = null;
             let maxRedirects = 5;
             do {
                 try {
-                    response = await NativeHttp.sendRequest(redirectUrl ?? url, options);
+                    const nativeRequestOptions: CapacitorHttpRequestOptions = {
+                        ...options,
+                        url: redirectUrl ?? url,
+                        method: options.method.toUpperCase(),
+                        headers,
+                        params: this.getCapacitorHttpParams(options.params),
+                        connectTimeout: options.timeout,
+                        readTimeout: options.timeout,
+                        disableRedirects: options.followRedirect === false,
+                    };
+
+                    response = await CapacitorHttp.request(nativeRequestOptions) as CoreNativeHttpResponse<T>;
+
+                    if (response.status < 200 || response.status >= 300) {
+                        throw response;
+                    }
+
                     redirectUrl = null;
                 } catch (error) {
-                    // Error is a response object.
-                    response = error as NativeHttpResponse;
+                    // Non-2xx errors are treated as failed responses to preserve existing handling.
+                    response = this.normalizeNativeHttpErrorResponse<T>(redirectUrl ?? url, error);
 
                     const headers = new HttpHeaders(response.headers); // Convert to HttpHeaders because names are normalised.
 
@@ -1229,7 +1270,7 @@ export class CoreWSProvider {
                     redirectUrl = headers.get('Location');
                     maxRedirects--;
                     if (!redirectUrl || maxRedirects < 0) {
-                        throw error;
+                        throw response;
                     }
                 }
             } while (redirectUrl);
@@ -1284,6 +1325,83 @@ export class CoreWSProvider {
 
             return await firstValueFrom(observable);
         }
+    }
+
+    /**
+     * Convert HTTP params to the format expected by CapacitorHttp.
+     *
+     * @param params HTTP params.
+     * @returns Params with string values.
+     */
+    protected getCapacitorHttpParams(params?: Record<string, string | number>): Record<string, string> | undefined {
+        if (!params) {
+            return undefined;
+        }
+
+        return Object.entries(params).reduce((result, [key, value]) => {
+            result[key] = String(value);
+
+            return result;
+        }, {} as Record<string, string>);
+    }
+
+    /**
+     * Normalise native HTTP errors to a response-like object.
+     *
+     * @param url Request URL.
+     * @param error Error thrown by CapacitorHttp.
+     * @returns Normalised response-like object.
+     */
+    protected normalizeNativeHttpErrorResponse<T>(url: string, error: unknown): CoreNativeHttpResponse<T> {
+        const responseError = error as Partial<CoreNativeHttpResponse<T>>;
+        const message = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+        const status = typeof responseError.status === 'number' ? responseError.status : this.inferNativeHttpErrorStatus(message);
+
+        return {
+            data: <T> message,
+            headers: responseError.headers ?? {},
+            status,
+            url: responseError.url ?? url,
+        };
+    }
+
+    /**
+     * Infer a legacy-like status code from a native error message.
+     *
+     * @param message Error message.
+     * @returns Status code.
+     */
+    protected inferNativeHttpErrorStatus(message: string): number {
+        const normalisedMessage = message.toLowerCase();
+
+        if (
+            normalisedMessage.includes('ssl') ||
+            normalisedMessage.includes('certificate') ||
+            normalisedMessage.includes('handshake')
+        ) {
+            return NATIVE_HTTP_ERROR_STATUS.sslException;
+        }
+
+        if (normalisedMessage.includes('timed out') || normalisedMessage.includes('timeout')) {
+            return NATIVE_HTTP_ERROR_STATUS.timeout;
+        }
+
+        if (normalisedMessage.includes('unsupported') && normalisedMessage.includes('url')) {
+            return NATIVE_HTTP_ERROR_STATUS.unsupportedUrl;
+        }
+
+        if (
+            normalisedMessage.includes('unable to resolve host') ||
+            normalisedMessage.includes('host') && normalisedMessage.includes('not found')
+        ) {
+            return NATIVE_HTTP_ERROR_STATUS.serverNotFound;
+        }
+
+        if (normalisedMessage.includes('network is unreachable') || normalisedMessage.includes('failed to connect')) {
+            return NATIVE_HTTP_ERROR_STATUS.notConnected;
+        }
+
+        return 0;
     }
 
     /**

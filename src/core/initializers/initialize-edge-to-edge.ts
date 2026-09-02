@@ -29,7 +29,7 @@ export default async function(): Promise<void> {
     // overlaysWebView(true) doesn't seem to do anything with cordova-android 15+ because Cordova applies margins to the WebView
     // from system bar insets in Android 14- (see setOnApplyWindowInsetsListener in CordovaActivity.java). However, a bug was
     // reported when using overlaysWebView(false) in Android 7 and 8, so set it to true just in case.
-    StatusBar.overlaysWebView(true);
+    // StatusBar.overlaysWebView(true);
 
     // Listener for system bars and cutout inset changes.
     const systemInsetListener = await Inset.create({

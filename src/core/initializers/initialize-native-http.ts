@@ -13,10 +13,9 @@
 // limitations under the License.
 
 import { CorePlatform } from '@services/platform';
-import { NativeHttp } from '@singletons';
 
 /**
- * This function sets the User-Agent header using NativeHttp for mobile platform.
+ * This function waits for the mobile platform before native HTTP requests are used.
  */
 export default async function(): Promise<void> {
     if (!CorePlatform.isMobile()) {
@@ -24,7 +23,4 @@ export default async function(): Promise<void> {
     }
 
     await CorePlatform.ready();
-
-    NativeHttp.setHeader('*', 'User-Agent', navigator.userAgent);
-    NativeHttp.setServerTrustMode('legacy');
 }

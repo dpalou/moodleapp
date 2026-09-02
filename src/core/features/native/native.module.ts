@@ -21,12 +21,11 @@ import { Clipboard } from '@awesome-cordova-plugins/clipboard/ngx';
 import { Device } from '@awesome-cordova-plugins/device/ngx';
 import { File } from '@awesome-cordova-plugins/file/ngx';
 import { FileOpener } from '@awesome-cordova-plugins/file-opener/ngx';
-import { HTTP } from '@awesome-cordova-plugins/http/ngx';
 import { InAppBrowser } from '@awesome-cordova-plugins/in-app-browser/ngx';
 import { Keyboard } from '@awesome-cordova-plugins/keyboard/ngx';
 import { LocalNotifications } from '@awesome-cordova-plugins/local-notifications/ngx';
 import { MediaCapture } from '@awesome-cordova-plugins/media-capture/ngx';
-import { Push } from '@features/native/plugins/push';
+// import { Push } from '@features/native/plugins/push';
 import { QRScanner } from './plugins/qrscanner';
 import { SplashScreen } from '@awesome-cordova-plugins/splash-screen/ngx';
 import { SQLite } from '@awesome-cordova-plugins/sqlite/ngx';
@@ -51,16 +50,15 @@ export async function getNativeServices(): Promise<Type<unknown>[]> {
         File,
         FileOpener,
         Geolocation, // eslint-disable-line @typescript-eslint/no-deprecated
-        HTTP,
         InAppBrowser,
         Keyboard,
         LocalNotifications,
         MediaCapture,
-        Push,
+        // Push,
         QRScanner,
         SplashScreen,
         SQLite,
-        StatusBar,
+        // StatusBar,
         WebIntent,
         WebView,
         Zip,
@@ -77,16 +75,15 @@ export async function getNativeServices(): Promise<Type<unknown>[]> {
         File,
         FileOpener,
         Geolocation, // eslint-disable-line @typescript-eslint/no-deprecated
-        HTTP,
         InAppBrowser,
         Keyboard,
         LocalNotifications,
         MediaCapture,
-        Push,
+        // Push,
         QRScanner,
         SplashScreen,
         SQLite,
-        StatusBar,
+        // StatusBar,
         WebIntent,
         WebView,
         Zip,

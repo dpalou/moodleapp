@@ -156,13 +156,13 @@ export class CoreScreenService {
             return;
         }
 
-        document.addEventListener('fullscreenchange', () => {
-            if (document.fullscreenElement) {
-                StatusBar.hide();
-            } else {
-                StatusBar.show();
-            }
-        });
+        // document.addEventListener('fullscreenchange', () => {
+        //     if (document.fullscreenElement) {
+        //         StatusBar.hide();
+        //     } else {
+        //         StatusBar.show();
+        //     }
+        // });
     }
 
     /**

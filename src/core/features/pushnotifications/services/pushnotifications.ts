@@ -52,7 +52,7 @@ import { lazyMap, LazyMap } from '@/core/utils/lazy-map';
 import { CorePlatform } from '@services/platform';
 import { CoreAnalytics, CoreAnalyticsEventType } from '@services/analytics';
 import { CoreSiteInfo } from '@classes/sites/unauthenticated-site';
-import { Push } from '@features/native/plugins';
+// import { Push } from '@features/native/plugins';
 import { CoreNavigator } from '@services/navigator';
 import { CoreWait } from '@static/wait';
 import { MAIN_MENU_HANDLER_BADGE_UPDATED_EVENT } from '@features/mainmenu/constants';
@@ -275,11 +275,11 @@ export class CorePushNotificationsProvider {
         }
 
         try {
-            await Push.createChannel({
-                id: 'PushPluginChannel',
-                description: Translate.instant('core.misc'),
-                importance: AndroidNotificationPriority.HIGH,
-            });
+            // await Push.createChannel({
+            //     id: 'PushPluginChannel',
+            //     description: Translate.instant('core.misc'),
+            //     importance: AndroidNotificationPriority.HIGH,
+            // });
         } catch (error) {
             this.logger.error('Error changing push channel name', error);
         }
@@ -604,43 +604,43 @@ export class CorePushNotificationsProvider {
     async registerDevice(): Promise<void> {
         try {
             // Check if sound is enabled for notifications.
-            const options = await this.getOptions();
+            // const options = await this.getOptions();
 
-            const pushObject = Push.init(options);
+            // const pushObject = Push.init(options);
 
-            pushObject.on('notification').subscribe((notification: NotificationEventResponse | { registrationType: string }) => {
-                // Execute the callback in the Angular zone, so change detection doesn't stop working.
-                NgZone.run(() => {
-                    if ('registrationType' in notification) {
-                        // Not a valid notification, ignore.
-                        return;
-                    }
+            // pushObject.on('notification').subscribe((notification: NotificationEventResponse | { registrationType: string }) => {
+            //     // Execute the callback in the Angular zone, so change detection doesn't stop working.
+            //     NgZone.run(() => {
+            //         if ('registrationType' in notification) {
+            //             // Not a valid notification, ignore.
+            //             return;
+            //         }
 
-                    this.logger.log('Received a notification', notification);
-                    this.onMessageReceived(notification);
-                });
-            });
+            //         this.logger.log('Received a notification', notification);
+            //         this.onMessageReceived(notification);
+            //     });
+            // });
 
-            pushObject.on('registration').subscribe((data: RegistrationEventResponse) => {
-                // Execute the callback in the Angular zone, so change detection doesn't stop working.
-                NgZone.run(() => {
-                    this.pushID = data.registrationId;
-                    if (!CoreSites.isLoggedIn() || !this.canRegisterOnMoodle()) {
-                        return;
-                    }
+            // pushObject.on('registration').subscribe((data: RegistrationEventResponse) => {
+            //     // Execute the callback in the Angular zone, so change detection doesn't stop working.
+            //     NgZone.run(() => {
+            //         this.pushID = data.registrationId;
+            //         if (!CoreSites.isLoggedIn() || !this.canRegisterOnMoodle()) {
+            //             return;
+            //         }
 
-                    this.registerDeviceOnMoodle().catch((error) => {
-                        this.logger.error('Can\'t register device', error);
-                    });
-                });
-            });
+            //         this.registerDeviceOnMoodle().catch((error) => {
+            //             this.logger.error('Can\'t register device', error);
+            //         });
+            //     });
+            // });
 
-            pushObject.on('error').subscribe((error: Error) => {
-                // Execute the callback in the Angular zone, so change detection doesn't stop working.
-                NgZone.run(() => {
-                    this.logger.warn('Error with Push plugin', error);
-                });
-            });
+            // pushObject.on('error').subscribe((error: Error) => {
+            //     // Execute the callback in the Angular zone, so change detection doesn't stop working.
+            //     NgZone.run(() => {
+            //         this.logger.warn('Error with Push plugin', error);
+            //     });
+            // });
         } catch (error) {
             this.logger.warn(error);
 
@@ -739,9 +739,9 @@ export class CorePushNotificationsProvider {
             return;
         }
 
-        const publicKey = await Push.getPublicKey();
+        // const publicKey = await Push.getPublicKey();
 
-        return publicKey ?? undefined;
+        // return publicKey ?? undefined;
     }
 
     /**

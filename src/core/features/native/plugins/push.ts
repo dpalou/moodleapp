@@ -27,8 +27,9 @@ export class Push extends IonicPush {
      *
      * @returns Public key or null.
      */
-    getPublicKey(): Promise<string | null> {
-        return new Promise((resolve, reject) => PushNotification.getPublicKey(resolve, reject));
+    async getPublicKey(): Promise<string | null> {
+        return null;
+        // return new Promise((resolve, reject) => PushNotification.getPublicKey(resolve, reject));
     }
 
 }

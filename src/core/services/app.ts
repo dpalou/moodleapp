@@ -258,7 +258,7 @@ export class CoreAppProvider {
 
         this.logger.debug(`Set status bar color ${color}`);
 
-        StatusBar.backgroundColorByHexString(color);
+        // StatusBar.backgroundColorByHexString(color);
     }
 
     /**
@@ -278,8 +278,7 @@ export class CoreAppProvider {
 
         this.logger.debug(`Set navigation bar color ${color}`);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (<any> window).StatusBar.navigationBackgroundColorByHexString(color);
+        // (<any> window).StatusBar.navigationBackgroundColorByHexString(color);
     }
 
     /**
