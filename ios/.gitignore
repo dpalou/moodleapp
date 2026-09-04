@@ -11,3 +11,7 @@ capacitor-cordova-ios-plugins
 # Generated Config files
 App/App/capacitor.config.json
 App/App/config.xml
+
+# This line doesn't do anything because the file is already tracked. But it's to inform that changes in this file should be ignored.
+# This file can be ignored using the command: git update-index --skip-worktree ios/App/App.xcodeproj/project.pbxproj
+App/App.xcodeproj/project.pbxproj
