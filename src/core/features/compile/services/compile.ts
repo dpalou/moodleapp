@@ -133,6 +133,7 @@ import {
     getSitePluginsServices,
 } from '@features/siteplugins/siteplugins.module';
 import { CoreError } from '@classes/errors/error';
+import { SplashScreen } from '@capacitor/splash-screen';
 
 /**
  * Service to provide functionalities regarding compiling dynamic HTML and Javascript.
@@ -422,6 +423,7 @@ export class CoreCompileProvider {
             getMainMenuExportedObjects(),
             getContentLinksExportedObjects(),
             getSitePluginsExportedObjects(),
+            [SplashScreen], // @todo: Export it in another place instead of hardcoding it here.
         ]);
 
         return Object.assign({}, ...objects);

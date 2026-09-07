@@ -2,6 +2,11 @@ This file describes API changes in the Moodle App that affect site plugins, info
 
 For more information about upgrading, read the official documentation: https://moodledev.io/general/app/upgrading/
 
+6.0.0
+=====
+
+ - Due to the Capacitor migration, navigator.splashcreen no longer exists. Use the exported SplashScreen instance instead.
+
 5.3.0
 =====
 

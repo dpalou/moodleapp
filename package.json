@@ -76,6 +76,7 @@
         "@capacitor/haptics": "^8.0.2",
         "@capacitor/ios": "8.5.0",
         "@capacitor/keyboard": "^8.0.5",
+        "@capacitor/splash-screen": "^8.0.2",
         "@capacitor/status-bar": "^8.0.3",
         "@ionic/angular": "^8.8.19",
         "@ionic/cordova-builders": "^12.3.0",
