@@ -28,7 +28,7 @@ import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.PluginResult;
 
-import com.adobe.phonegap.push.EncryptionHandler;
+// import com.adobe.phonegap.push.EncryptionHandler;
 
 public class SecureStorage extends CordovaPlugin {
 
@@ -94,7 +94,9 @@ public class SecureStorage extends CordovaPlugin {
                 continue;
             }
 
-            result.put(name, EncryptionHandler.Companion.decrypt(context, rawValue));
+            // @TODO Capacitor
+            result.put(name, rawValue);
+            // result.put(name, EncryptionHandler.Companion.decrypt(context, rawValue));
         }
 
         return result;
@@ -118,7 +120,9 @@ public class SecureStorage extends CordovaPlugin {
             String name = names.optString(i);
 
             if (name != null && !name.isEmpty()) {
-                editor.putString(name, EncryptionHandler.Companion.encrypt(context, data.getString(name)));
+                // @TODO Capacitor
+                // editor.putString(name, EncryptionHandler.Companion.encrypt(context, data.getString(name)));
+                editor.putString(name, data.getString(name));
             }
         }
 
